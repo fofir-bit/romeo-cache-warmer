@@ -1,0 +1,31 @@
+name: Warm cache
+
+on:
+  schedule:
+    # 01:00 UTC daily = 03:00 (winter) / 04:00 (summer) Israel time — always night.
+    # GitHub cron is UTC and does not follow DST; scheduled runs may be delayed a bit under load.
+    - cron: '0 1 * * *'
+  workflow_dispatch: {} # lets you run it manually from the Actions tab
+
+# Prevent two runs overlapping if one is still going
+concurrency:
+  group: warm-cache
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Warm the cache (gentle, throttled)
+        env:
+          SITE_URL: https://romeo-gifts.co.il
+          CONCURRENCY: '2'     # at most 2 pages at a time — gentle on the origin
+          DELAY_MS: '500'      # pause between requests per worker
+          REQ_TIMEOUT_MS: '20000'
+          VERIFY: 'true'
+        run: node warm.js
