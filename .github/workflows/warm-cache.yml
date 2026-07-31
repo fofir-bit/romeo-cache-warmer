@@ -4,8 +4,8 @@ on:
   schedule:
     # Two attempts per night at odd minutes (Israel night). If one hits a GitHub
     # infrastructure hiccup, the other covers it. Odd minutes avoid the top-of-hour rush.
-    - cron: '43 1 * * *'   # ~04:43 Israel (summer) / 03:43 (winter)
-    - cron: '29 2 * * *'   # ~05:29 Israel (summer) / 04:29 (winter) — backup attempt
+    - cron: '17 0 * * *'   # 03:17 Israel (summer) / 02:17 (winter)
+    - cron: '7 1 * * *'   # 04:07 Israel (summer) / 03:07 (winter) - backup attempt
   workflow_dispatch: {} # lets you run it manually from the Actions tab
 
 # Prevent two runs overlapping if one is still going
