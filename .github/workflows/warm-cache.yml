@@ -4,8 +4,8 @@ on:
   schedule:
     # Two attempts per night at odd minutes (Israel night). If one hits a GitHub
     # infrastructure hiccup, the other covers it. Odd minutes avoid the top-of-hour rush.
-    - cron: '17 0 * * *'   # 03:17 Israel (summer) / 02:17 (winter)
-    - cron: '7 1 * * *'   # 04:07 Israel (summer) / 03:07 (winter) - backup attempt
+    - cron: '17 0 * * *' # 03:17 Israel (summer) / 02:17 (winter)
+    - cron: '7 1 * * *' # 04:07 Israel (summer) / 03:07 (winter) - backup attempt
   workflow_dispatch: {} # lets you run it manually from the Actions tab
 
 # Prevent two runs overlapping if one is still going
@@ -16,19 +16,22 @@ concurrency:
 jobs:
   warm:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # v2 warms ~360 variation URLs on top of the ~366 sitemap URLs, so a fully
+    # cold night can run ~25 min. 20 was no longer enough.
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Warm the cache (with in-run retries)
         env:
           SITE_URL: https://romeo-gifts.co.il
-          CONCURRENCY: '2'      # at most 2 pages at a time — gentle on the origin
-          DELAY_MS: '400'       # pause between requests per worker
+          CONCURRENCY: '2' # at most 2 pages at a time — gentle on the origin
+          DELAY_MS: '400' # pause between requests per worker
           REQ_TIMEOUT_MS: '20000'
-          VERIFY: 'false'       # single warming pass (faster run)
+          VERIFY: 'false' # single warming pass (faster run)
+          WARM_VARIATIONS: 'true' # v2: also warm ?attribute_pa_... variation URLs
         run: |
           for attempt in 1 2 3; do
             echo "=== Warm attempt $attempt ==="
