@@ -1,0 +1,50 @@
+name: CSS health check
+
+# Fails (and GitHub emails you) if any CSS file on key pages returns an
+# error or an HTML page instead of real CSS, e.g. a cached 404 page.
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Check CSS on key pages
+        run: |
+          cat > check.mjs <<'EOF'
+          const SITE = 'https://romeo-gifts.co.il';
+          const PAGES = ['/', '/shop/', '/product-category/havdalah-candles/'];
+          const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 romeo-css-check';
+          const bad = [];
+          for (const p of PAGES) {
+            const page = SITE + p;
+            const r = await fetch(page, { headers: { 'user-agent': UA } });
+            const html = await r.text();
+            if (r.status !== 200) { bad.push(page + ' -> page HTTP ' + r.status); continue; }
+            const urls = [...new Set([...html.matchAll(/<link[^>]+href=["']([^"']+\.css[^"']*)["']/g)]
+              .map(m => m[1].replace(/&amp;/g, '&')))]
+              .map(u => new URL(u, SITE).href)
+              .filter(u => u.startsWith(SITE));
+            console.log(page + ': ' + urls.length + ' CSS files');
+            for (const u of urls) {
+              const c = await fetch(u, { headers: { 'user-agent': UA } });
+              const t = await c.text();
+              const isHtml = /^\s*</.test(t);
+              if (c.status !== 200 || isHtml) {
+                bad.push(u + ' -> HTTP ' + c.status + ', ' + c.headers.get('content-type') + ', cf ' + c.headers.get('cf-cache-status') + ', html body: ' + isHtml);
+              }
+            }
+          }
+          if (bad.length) {
+            console.error('BROKEN CSS FOUND. Clear WP Rocket + Hosting cache:\n' + bad.join('\n'));
+            process.exit(1);
+          }
+          console.log('All CSS OK');
+          EOF
+          node check.mjs
