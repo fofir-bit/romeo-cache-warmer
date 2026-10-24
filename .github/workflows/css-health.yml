@@ -19,7 +19,7 @@ jobs:
         run: |
           cat > check.mjs <<'EOF'
           const SITE = 'https://romeo-gifts.co.il';
-          const PAGES = ['/', '/shop/', '/product-category/havdalah-candles/'];
+          const PAGES = ['/', '/shop/', '/product-category/%D7%99%D7%95%D7%93%D7%90%D7%99%D7%A7%D7%94/havdalah-candles/']; // canonical URL (יודאיקה/havdalah-candles); the short /product-category/havdalah-candles/ is a non-canonical alias
           const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 romeo-css-check';
           const bad = [];
           for (const p of PAGES) {
