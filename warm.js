@@ -21,6 +21,11 @@
  *   `variations[].attributes[]`. That is exactly what WooCommerce itself uses to
  *   build a variation permalink, so the URLs match the ones in the ad catalogs.
  *
+ * v3 (Nov 2026) — also warms the MOBILE cache.
+ *   WP Rocket keeps a separate cache for mobile visitors (~80% of sessions).
+ *   v1/v2 sent a desktop User-Agent only, so the mobile cache was never warmed.
+ *   v3 runs a second pass over the same URLs with a mobile User-Agent.
+ *
  * No dependencies. Requires Node 18+ (built-in fetch).
  * Configurable via env vars (see below), all optional.
  */
@@ -31,17 +36,19 @@ const DELAY_MS = parseInt(process.env.DELAY_MS || '250', 10); // pause between r
 const REQ_TIMEOUT_MS = parseInt(process.env.REQ_TIMEOUT_MS || '30000', 10); // abort a stuck request
 const VERIFY = (process.env.VERIFY || 'true') !== 'false'; // do a 2nd pass to confirm HIT rate
 const WARM_VARIATIONS = (process.env.WARM_VARIATIONS || 'true') !== 'false'; // v2: warm variation URLs too
-const UA = process.env.USER_AGENT || 'Mozilla/5.0 (compatible; RomeoCacheWarmer/2.0; +sitemap warmer)';
+const UA = process.env.USER_AGENT || 'Mozilla/5.0 (compatible; RomeoCacheWarmer/3.0; +sitemap warmer)';
+const WARM_MOBILE = (process.env.WARM_MOBILE || 'true') !== 'false'; // v3: second pass with a mobile User-Agent
+const MOBILE_UA = process.env.MOBILE_USER_AGENT || 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 RomeoCacheWarmer/3.0';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function timedFetch(url) {
+async function timedFetch(url, ua = UA) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQ_TIMEOUT_MS);
   const t0 = Date.now();
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/xml' },
+      headers: { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml,application/xml' },
       redirect: 'follow',
       signal: ctrl.signal,
     });
@@ -135,14 +142,14 @@ async function collectVariationUrls() {
   return [...urls];
 }
 
-async function pass(name, items) {
+async function pass(name, items, ua = UA) {
   const results = [];
   let idx = 0;
   async function worker() {
     while (idx < items.length) {
       const my = idx++;
       const it = items[my];
-      const r = await timedFetch(it.url);
+      const r = await timedFetch(it.url, ua);
       results.push({ url: it.url, group: it.group, status: r.status, ms: r.ms, cf: r.cf, error: r.error });
       const tag = r.cf === 'HIT' ? 'HIT ' : r.cf === 'ERR' ? 'ERR ' : 'MISS';
       console.log(`[${name}] [${String(my + 1).padStart(3)}/${items.length}] ${it.group === 'variation' ? 'VAR ' : 'PAGE'} ${tag} ${r.status} ${String(r.ms).padStart(5)}ms ${it.url}`);
@@ -172,7 +179,7 @@ function summarizeByGroup(results) {
 }
 
 (async () => {
-  console.log(`Cache warm start ${new Date().toISOString()} -> ${SITE} (concurrency=${CONCURRENCY}, variations=${WARM_VARIATIONS})`);
+  console.log(`Cache warm start ${new Date().toISOString()} -> ${SITE} (concurrency=${CONCURRENCY}, variations=${WARM_VARIATIONS}, mobile=${WARM_MOBILE})`);
 
   const sitemapUrls = await collectUrls();
   console.log(`Discovered ${sitemapUrls.length} sitemap URLs`);
@@ -188,10 +195,19 @@ function summarizeByGroup(results) {
   console.log(`Warming ${items.length} URLs total (${sitemapUrls.length} sitemap + ${items.length - sitemapUrls.length} variation)\n`);
 
   const warm = await pass('warm', items);
-  summarize('warm pass', warm);
+  summarize('warm pass (desktop)', warm);
   summarizeByGroup(warm);
 
-  let stats = summarize('result', warm);
+  let all = warm;
+  if (WARM_MOBILE) {
+    console.log('\n=== Mobile pass (WP Rocket mobile cache) ===');
+    const mob = await pass('mobile', items, MOBILE_UA);
+    summarize('warm pass (mobile)', mob);
+    summarizeByGroup(mob);
+    all = warm.concat(mob);
+  }
+
+  let stats = summarize('result', all);
   if (VERIFY) {
     await sleep(1500);
     const verify = await pass('verify', items);
