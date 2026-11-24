@@ -2,10 +2,10 @@ name: Warm cache
 
 on:
   schedule:
-    # Two attempts per night at odd minutes (Israel night). If one hits a GitHub
-    # infrastructure hiccup, the other covers it. Odd minutes avoid the top-of-hour rush.
-    - cron: '17 0 * * *' # 03:17 Israel (summer) / 02:17 (winter)
-    - cron: '7 1 * * *' # 04:07 Israel (summer) / 03:07 (winter) - backup attempt
+    # Every 3 hours at an odd minute (UTC). GitHub starts scheduled runs late
+    # (measured Nov 2026: a 02:17 run actually started 09:00-11:00 Israel), and every
+    # content edit on the site purges the whole cache, so one nightly run is not enough.
+    - cron: '17 */3 * * *'
   workflow_dispatch: {} # lets you run it manually from the Actions tab
 
 # Prevent two runs overlapping if one is still going
@@ -16,9 +16,9 @@ concurrency:
 jobs:
   warm:
     runs-on: ubuntu-latest
-    # v2 warms ~360 variation URLs on top of the ~366 sitemap URLs, so a fully
-    # cold night can run ~25 min. 20 was no longer enough.
-    timeout-minutes: 35
+    # v3 warms ~300 sitemap + ~390 variation URLs twice (desktop + mobile User-Agent),
+    # so a fully cold run can take ~50 min.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -32,6 +32,7 @@ jobs:
           REQ_TIMEOUT_MS: '20000'
           VERIFY: 'false' # single warming pass (faster run)
           WARM_VARIATIONS: 'true' # v2: also warm ?attribute_pa_... variation URLs
+          WARM_MOBILE: 'true' # v3: second pass with a mobile User-Agent (WP Rocket mobile cache)
         run: |
           for attempt in 1 2 3; do
             echo "=== Warm attempt $attempt ==="
